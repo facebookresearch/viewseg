@@ -1,0 +1,40 @@
+# @package _global_
+defaults:
+  - defaults
+
+validation_epoch_interval: 1
+checkpoint_epoch_interval: 1
+checkpoint_path: 'checkpoints/panonerf_hypersim_base.pth'
+data:
+  dataset_name: 'hypersim'
+  image_size: [768, 1024] # [height, width]
+  render_size: [768, 1024]
+  num_workers: 1
+  precache_rays: False # Only works for batch size = 1
+train:
+  batch_size: 1
+  num_views: 4
+  use_source_view: True  # should we predict semantics on source view?
+  use_target_view: True
+test:
+  mode: 'evaluation'
+  split: 'val'
+  use_depth: True
+optimizer:
+  ignore_index: -1  # hypersim uses -1 for invalid pixels
+visualization:
+  visdom_env: 'panonerf_hypersim_base'
+raysampler:
+  min_depth: 0.1
+  max_depth: 20.0
+implicit_function:
+  n_classes: 37
+  transform_to_source_view: True
+  use_image_feats: True
+  resnetfc: True
+  use_view_dirs: True
+  use_depth: False
+  use_importance_sampling: False  # sample more objects
+encoder:
+  backbone: "deeplabv3_plus"
+  pretrained_model_path: 'checkpoints/deeplabv3_ade20k/model_final.pth'

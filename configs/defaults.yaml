@@ -1,0 +1,87 @@
+seed: 3
+resume: True
+stats_print_interval: 10
+validation_epoch_interval: 15
+checkpoint_epoch_interval: 15
+checkpoint_path: 'checkpoints/replica.pth'
+data:
+  dataset_name: 'habitat_sem_v1'
+  image_size: [320, 320] # [height, width]
+  render_size: [320, 320]
+  num_workers: 0
+  precache_rays: True # Only works for batch size = 1
+train:
+  batch_size: 1
+  num_views: 1
+  use_source_view: False  # should we predict semantics on source view?
+  use_target_view: True
+  num_samples: -1 # all examples in the dataloader
+test:
+  epoch: None
+  mode: 'evaluation'
+  split: 'test'
+  trajectory_type: 'circular'
+  #up: [0.0, 0.0, 1.0]
+  up: [0.0, 1.0, 0.0]
+  scene_center: [0.0, 0.0, 0.0]
+  n_frames: 100
+  fps: 20
+  trajectory_scale: 0.2
+  num_samples: 100
+  use_depth: False
+  pcd_confidence: 0.7
+  pcd_border_crop: 20
+  shortlist: None
+optimizer:
+  max_epochs: 20000
+  lr: 0.0005
+  lr_scheduler_step_size: 5000
+  lr_scheduler_gamma: 0.1
+  lbd_semantic: 0.04
+  lbd_color: 1.0
+  lbd_depth: 0.1
+  ignore_index: -100  # pytorch F.cross_entropy default value
+visualization:
+  history_size: 10
+  visdom: True
+  #visdom_server: 'http://100.97.72.206'
+  visdom_server: 'http://nordrassil.eecs.umich.edu'
+  visdom_port: 8097
+  visdom_env: 'nerf_sem'
+raysampler:
+  n_pts_per_ray: 64
+  n_pts_per_ray_fine: 128
+  n_rays_per_image: 1024
+  min_depth: 0.1
+  max_depth: 10.0
+  stratified: True
+  stratified_test: False
+  chunk_size_test: 6000
+implicit_function:
+  n_classes: 102
+  n_harmonic_functions_xyz: 10
+  n_harmonic_functions_dir: 4
+  n_hidden_neurons_xyz: 256
+  n_hidden_neurons_dir: 128
+  density_noise_std: 0.0
+  n_layers_xyz: 8
+  transform_to_source_view: False
+  use_image_feats: False
+  resnetfc: False
+  use_depth: False
+encoder:
+  backbone: "resnet34"
+  bn: "SyncBN" # ['SyncBN', 'BN', 'FrozenBN']
+  num_layers: 4
+  pretrained: True
+  norm_type: "batch"
+  use_first_pool: True
+  index_interp: "bilinear"
+  index_padding: "border"
+  upsample_interp: "bilinear"
+  feature_scale: 1.0
+segcloud:
+  enabled: False
+hydra:
+  sweep:
+    dir: "multirun/${now:%Y-%m-%d}/${now:%H-%M-%S}"
