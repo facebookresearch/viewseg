@@ -1,34 +1,20 @@
 #!/usr/bin/env python3
 # Copyright (c) Meta Platforms, Inc. and affiliates.
 import os, sys
-import warnings
 import numpy as np
 from tqdm import tqdm
-import collections
 from omegaconf import DictConfig
-from PIL import Image
-import pdb
-import imageio
 import pickle
 import itertools
-import yaml
-
 import torch
 import hydra
 import submitit
-from accelerate import Accelerator, DistributedType, DistributedDataParallelKwargs
-from pytorch3d.renderer.cameras import PerspectiveCameras
-from pytorch3d.io import save_obj
-
+from accelerate import Accelerator, DistributedDataParallelKwargs
 from detectron2.data import MetadataCatalog
-from detectron2.utils.visualizer import ColorMode, Visualizer
 from detectron2.evaluation import SemSegEvaluator
 from detectron2.utils.comm import get_rank
+
 from viewseg.dataset import collate_fn, get_viewseg_datasets
-from viewseg.renderer import SemanticRadianceFieldRenderer
-from viewseg.vis import visualize_nerf_outputs, save_nerf_outputs
-from viewseg.nerf.stats import Stats
-from viewseg.encoder import build_spatial_encoder
 from viewseg.utils import single_gpu_prepare
 
 CONFIG_DIR = os.path.join(os.path.dirname(os.path.realpath(__file__)), "configs")
@@ -84,8 +70,33 @@ def main(cfg: DictConfig):
 
     print("[detectron2] rank {}".format(get_rank()))
 
-    #dataset_name = 'hypersim_sem_seg_val'
-    dataset_name = 'replica_sem_seg_val'
+    train_dataset, val_dataset, test_dataset = get_viewseg_datasets(
+        dataset_name=cfg.data.dataset_name,
+        image_size=cfg.data.image_size,
+        num_views=cfg.train.num_views,
+        load_depth=cfg.test.use_depth,
+    )
+
+    print("data split: {}".format(cfg.test.split))
+    if cfg.test.split == 'train':
+        test_dataset = train_dataset
+    elif cfg.test.split == 'val':
+        test_dataset = val_dataset
+    elif cfg.test.split == 'test':
+        pass
+    else:
+        raise NotImplementedError
+
+    # Init the test dataloader.
+    test_dataloader = torch.utils.data.DataLoader(
+        test_dataset,
+        batch_size=1,
+        shuffle=True,
+        num_workers=4,
+        collate_fn=collate_fn,
+    )
+
+    dataset_name = '{}_sem_seg_{}'.format(cfg.data.dataset_name, cfg.test.split)
     metadata = MetadataCatalog.get(dataset_name)
     result_dir = os.path.join(output_dir, '{:0>4}_eval_on_{}'.format(stats.epoch, cfg.data.dataset_name))
     print(result_dir)
@@ -112,9 +123,6 @@ def main(cfg: DictConfig):
         conf_matrix_list.append(gpu_results['conf_matrix'])
         predictions.append(gpu_results['predictions'])
         gpu_depth_metrics = gpu_results['depth_metrics']
-        if cfg.test.use_depth:
-            for metric in gpu_depth_metrics:
-                depth_metrics[metric].extend(gpu_depth_metrics[metric])
 
     print("aggregating...")
     evaluator._predictions = list(itertools.chain(*predictions))
@@ -122,14 +130,9 @@ def main(cfg: DictConfig):
     for gpu_conf_matrix in conf_matrix_list:
         conf_matrix += gpu_conf_matrix
     evaluator._conf_matrix = conf_matrix
-    if cfg.test.use_depth:
-        for metric in depth_metrics:
-            depth_metrics[metric] = np.array(depth_metrics[metric]).mean()
-
 
     print("[detectron2 evaluation]")
     results = evaluator.evaluate()
-
 
     print("treating objects as a single class")
     print("[object and stuff evaluation]")
@@ -160,34 +163,7 @@ def main(cfg: DictConfig):
     print(results)
 
     print("[depth metrics]")
-
-    train_dataset, val_dataset, test_dataset = get_viewseg_datasets(
-        dataset_name=cfg.data.dataset_name,
-        image_size=cfg.data.image_size,
-        num_views=cfg.train.num_views,
-        load_depth=cfg.test.use_depth,
-    )
-
-    print("data split: {}".format(cfg.test.split))
-    if cfg.test.split == 'train':
-        test_dataset = train_dataset
-    elif cfg.test.split == 'val':
-        test_dataset = val_dataset
-    elif cfg.test.split == 'test':
-        pass
-    else:
-        raise NotImplementedError
-
     
-    # Init the test dataloader.
-    test_dataloader = torch.utils.data.DataLoader(
-        test_dataset,
-        batch_size=1,
-        shuffle=True,
-        num_workers=4,
-        collate_fn=collate_fn,
-    )
-
     depth_metrics = {
         'all': {
             'absolute': {'cnt': 0, 'total': 0},
@@ -250,9 +226,6 @@ def main(cfg: DictConfig):
             l1_abs = torch.abs(sub_depth_pred - sub_depth)
             depth_metrics[sem_type]['absolute']['cnt'] += thres_all
             depth_metrics[sem_type]['absolute']['total'] += l1_abs.sum().item()
-            if np.isnan(depth_metrics[sem_type]['absolute']['total']) or np.isnan(depth_metrics[sem_type]['absolute']['cnt']):
-                pdb.set_trace()
-                pass
 
             absrel = torch.abs(sub_depth_pred - sub_depth) / sub_depth
             depth_metrics[sem_type]['absrel']['cnt'] += thres_all

@@ -7,7 +7,6 @@ from tqdm import tqdm
 import collections
 from omegaconf import DictConfig
 from PIL import Image
-import pdb
 import imageio
 import pickle
 
@@ -22,7 +21,7 @@ from detectron2.data import MetadataCatalog
 from detectron2.utils.visualizer import ColorMode, Visualizer
 from detectron2.evaluation import SemSegEvaluator
 from detectron2.utils.comm import get_rank
-from viewseg.dataset import collate_fn, get_viewseg_datasets
+from viewseg.dataset import collate_fn, get_viewseg_datasets, DEFAULT_DATA_ROOT
 from viewseg.renderer import SemanticRadianceFieldRenderer
 from viewseg.vis import visualize_nerf_outputs, save_nerf_outputs
 from viewseg.nerf.stats import Stats
@@ -61,7 +60,6 @@ def main(cfg: DictConfig):
     print("initialize ddp scaler")
     ddp_scaler = DistributedDataParallelKwargs(find_unused_parameters=True)
     accelerator = Accelerator(kwargs_handlers=[ddp_scaler])
-    #accelerator = Accelerator()
     device = accelerator.device    
     print("Device", accelerator.device)
 
@@ -152,7 +150,6 @@ def main(cfg: DictConfig):
             dataset_name=cfg.data.dataset_name,
             image_size=cfg.data.image_size,
             num_views=cfg.train.num_views,
-            #load_depth=cfg.implicit_function.use_depth,
             load_depth=cfg.test.use_depth,
         )
         export_dir = os.path.splitext(checkpoint_path)[0] + '_' + cfg.test.split + "_imgs"
@@ -264,13 +261,10 @@ def main(cfg: DictConfig):
             # we do not run on source views
             source_nerf_outs = []
 
-        if cfg.data.dataset_name == 'hypersim_v5_ns4':
-            dataset_seg_dir = '/checkpoint/syqian/panonerf_data/hypersim_sem_seg_v3/images'
-        elif cfg.data.dataset_name == 'hypersim_v6':
-            dataset_seg_dir = '/checkpoint/syqian/panonerf_data/hypersim_sem_seg_v4/images'
-        elif cfg.data.dataset_name in ['replica_v4', 'replica_v4_gl', 'replica_v4_noise']:
-            #dataset_seg_dir = '/checkpoint/syqian/panonerf_data/replica_sem_seg_v4/images'
-            dataset_seg_dir = '/nfs/turbo/fouheyUnrep/syqian/viewseg_data/replica_sem_seg/images'
+        if cfg.data.dataset_name == 'hypersim':
+            dataset_seg_dir = os.path.join(DEFAULT_DATA_ROOT, 'hypersim_sem_seg', 'images')
+        elif cfg.data.dataset_name == 'replica':
+            dataset_seg_dir = os.path.join(DEFAULT_DATA_ROOT, 'replica_sem_seg', 'images')
         else:
             raise NotImplementedError("cannot find sem seg dataset for {} in detectron2".format(cfg.data.dataset_name))
 

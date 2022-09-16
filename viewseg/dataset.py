@@ -4,9 +4,7 @@ from typing import List, Optional, Tuple, Dict
 import warnings
 import h5py
 import numpy as np
-import requests
 from PIL import Image
-import pdb
 import torch
 from pytorch3d.renderer import PerspectiveCameras
 from torch.utils.data import Dataset
